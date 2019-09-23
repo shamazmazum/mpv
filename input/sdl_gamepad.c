@@ -19,10 +19,15 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include "common/common.h"
-#include "osdep/atomic.h"
 #include "common/msg.h"
 #include "input.h"
 #include "input/keycodes.h"
+
+#define MAX_CONTROLLERS 32
+
+struct gamepad_priv {
+    SDL_GameController *map[MAX_CONTROLLERS];
+};
 
 static Uint32 gamepad_cancel_wakeup;
 
@@ -157,6 +162,48 @@ static void uninit(struct mp_input_src *src)
 
 #define GUID_LEN 33
 
+static bool add_gamepad(struct mp_input_src *src, int id)
+{
+    struct gamepad_priv *p = src->priv;
+
+    if (SDL_IsGameController(id)) {
+        SDL_GameController *controller = SDL_GameControllerOpen(id);
+        SDL_Joystick* j = SDL_GameControllerGetJoystick(controller);
+        SDL_JoystickID jid = SDL_JoystickInstanceID(j);
+
+        if (jid >= MAX_CONTROLLERS) {
+            MP_WARN(src, "can't add controller id %d, out bounds", jid);
+            return false;
+        }
+
+        if (controller && !p->map[jid]) {
+            const char *name = SDL_GameControllerName(controller);
+            MP_INFO(src, "added controller (%d): %s\n", jid, name);
+            p->map[jid] = controller;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void remove_gamepad(struct mp_input_src *src, int id)
+{
+    if (id >= MAX_CONTROLLERS) {
+        MP_WARN(src, "can't remove controller id %d, out bounds", id);
+        return;
+    }
+
+    struct gamepad_priv *p = src->priv;
+    SDL_GameController *c = p->map[id];
+    if (c) {
+        const char *name = SDL_GameControllerName(c);
+        MP_INFO(src, "removed controller (%d): %s\n", id, name);
+        SDL_GameControllerClose(c);
+        p->map[id] = NULL;
+    }
+}
+
 static void read_gamepad_thread(struct mp_input_src *src, void *param)
 {
     if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER)) {
@@ -165,49 +212,25 @@ static void read_gamepad_thread(struct mp_input_src *src, void *param)
         return;
     };
 
-    SDL_GameController *controller;
     pthread_once(&events_initialized, initalize_events);
 
     if (gamepad_cancel_wakeup == (Uint32)-1) {
         MP_ERR(src, "Can't register SDL custom events\n");
-        return;
-    }
-
-    char guid[GUID_LEN];
-
-    if (SDL_NumJoysticks() <= 0) {
-        MP_VERBOSE(src, "no joysticks found");
         mp_input_src_init_done(src);
         return;
     }
 
-    MP_VERBOSE(src, "connected controllers: %i\n", SDL_NumJoysticks());
-
-    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
-        if (SDL_IsGameController(i)) {
-            controller = SDL_GameControllerOpen(i);
-            SDL_JoystickID id = SDL_JoystickInstanceID(
-                SDL_GameControllerGetJoystick(controller));
-
-            SDL_JoystickGetGUIDString(
-                SDL_JoystickGetGUID(SDL_GameControllerGetJoystick(controller)),
-                guid, GUID_LEN);
-
-            if (controller) {
-                MP_VERBOSE(
-                    src, "detected controller #%i: %s, guid: %s\n",
-                    id, SDL_GameControllerName(controller), guid);
-
-                // stop at first controller apparently SDL can't open more
-                // than one controller anyway?
-                break;
-            }
-        }
-    }
-
+    src->priv = talloc_zero(src, struct gamepad_priv);
     src->cancel = request_cancel;
     src->uninit = uninit;
+
     mp_input_src_init_done(src);
+
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (add_gamepad(src, i)) {
+            break;
+        }
+    }
 
     SDL_Event ev;
 
@@ -217,6 +240,14 @@ static void read_gamepad_thread(struct mp_input_src *src, void *param)
         }
 
         switch (ev.type) {
+            case SDL_CONTROLLERDEVICEADDED: {
+                add_gamepad(src, ev.cdevice.which);
+                continue;
+            }
+            case SDL_CONTROLLERDEVICEREMOVED: {
+                remove_gamepad(src, ev.cdevice.which);
+                continue;
+            }
             case SDL_CONTROLLERBUTTONDOWN: {
                 const int key = lookup_button_mp_key(ev.cbutton.button);
                 if (key != INVALID_KEY) {
@@ -243,8 +274,8 @@ static void read_gamepad_thread(struct mp_input_src *src, void *param)
         }
     }
 
-    if (controller != NULL) {
-        SDL_GameControllerClose(controller);
+    for (int i = 0; i < MAX_CONTROLLERS; i++) {
+        remove_gamepad(src, i);
     }
 
     // must be called on the same thread of SDL_InitSubSystem, so uninit
