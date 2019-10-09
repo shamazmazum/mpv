@@ -285,7 +285,13 @@ static void ao_play_data(struct ao *ao)
     int space = ao->driver->get_space(ao);
     bool play_silence = p->paused || (ao->stream_silence && !p->still_playing);
     space = MPMAX(space, 0);
-    if (space % ao->period_size)
+    /*
+     * KLUDGE: Allow "unaligned available buffer size" in nas driver
+     * as it seems impossible to write an amount of samples to the
+     * server which is multiple of ao->period_size. Nevertheless
+     * everything seems to be OK.
+     */
+    if (strcmp(ao->driver->name, "nas") != 0 && space % ao->period_size)
         MP_ERR(ao, "Audio device reports unaligned available buffer size.\n");
     uint8_t **planes;
     int samples;

@@ -51,6 +51,7 @@ extern const struct ao_driver audio_out_wasapi;
 extern const struct ao_driver audio_out_pcm;
 extern const struct ao_driver audio_out_lavc;
 extern const struct ao_driver audio_out_sdl;
+extern const struct ao_driver audio_out_nas;
 
 static const struct ao_driver * const audio_out_drivers[] = {
 // native:
@@ -96,6 +97,9 @@ static const struct ao_driver * const audio_out_drivers[] = {
     &audio_out_lavc,
 #if HAVE_RSOUND
     &audio_out_rsound,
+#endif
+#if HAVE_NAS
+    &audio_out_nas,
 #endif
     NULL
 };
