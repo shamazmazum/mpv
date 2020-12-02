@@ -250,6 +250,7 @@ def build(ctx):
         ( "audio/out/ao_wasapi.c",               "wasapi" ),
         ( "audio/out/ao_wasapi_changenotify.c",  "wasapi" ),
         ( "audio/out/ao_wasapi_utils.c",         "wasapi" ),
+        ( "audio/out/ao_nas.c",                  "nas" ),
         ( "audio/out/buffer.c" ),
 
         ## Core

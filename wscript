@@ -460,6 +460,11 @@ audio_output_features = [
         'desc': 'WASAPI audio output',
         'deps': 'os-win32 || os-cygwin',
         'func': check_cc(fragment=load_fragment('wasapi.c')),
+    }, {
+       'name': '--nas',
+       'desc': 'NAS audio output',
+       'func': check_cc(header_name=['audio/audiolib.h'], lib='audio'),
+       'default': 'disable'
     }
 ]
 
