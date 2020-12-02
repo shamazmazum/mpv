@@ -870,6 +870,12 @@ if features['wasapi']
                      'audio/out/ao_wasapi_utils.c')
 endif
 
+nas = dependency('nas', required: get_option('nas'))
+features += {'nas': nas.found()}
+if features['nas']
+    dependencies += nas
+    sources += files('audio/out/ao_nas.c')
+endif
 
 # video output dependencies
 caca_opt = get_option('caca').require(
