@@ -575,7 +575,7 @@ static void audio_start(struct ao *ao)
     }
 }
 
-static int audio_write(struct ao *ao, void **data, int samples)
+static bool audio_write(struct ao *ao, void **data, int samples)
 {
     struct priv *nas_data = ao->priv;
     int len = samples * ao->sstride;
